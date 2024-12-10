@@ -1,0 +1,7 @@
+NAME: TanksAndTemples
+N_POINTS: 16384
+PC_PATH: dataset/TanksAndTemples/pcd
+IMG_PATH: dataset/TanksAndTemples/img
+
+TRAIN_PATH: dataset/TanksAndTemples/test.csv
+TEST_PATH: dataset/TanksAndTemples/test.csv
