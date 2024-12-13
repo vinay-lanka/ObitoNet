@@ -39,6 +39,6 @@ model : {
   }
 
 npoints: 16384
-total_bs : 128
+total_bs : 32
 step_per_update : 1
 max_epoch : 300

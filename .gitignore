@@ -1,1 +1,7 @@
 dataset/
+wandb/
+tools/__pycache__
+utils/__pycache__
+current_run/
+tfboard/
+vis/

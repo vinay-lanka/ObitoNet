@@ -9,16 +9,18 @@ import numpy as np
 
 class TanksAndTemples(Dataset):
     def __init__(self, config):
-        self.subset = config.subset
-        if self.others.subset == 'train':
-            self.data_root = config.TRAIN_PATH
-        if self.others.subset == 'test':
-            self.data_root = config.TEST_PATH
+        print(config)
+        self.subset = config.others.subset
+        if self.subset == 'train':
+            self.data_root = config._base_.TRAIN_PATH
+        if self.subset == 'test':
+            self.data_root = config._base_.TEST_PATH
 
         data = pd.read_csv(self.data_root)
         self.pcd_paths = data.iloc[:, 0].tolist()
         self.img_paths = data.iloc[:, 1].tolist()   
-        self.npoints = config.N_POINTS
+        self.npoints = config._base_.N_POINTS
+        self.pc_path_root = config._base_.PC_PATH
 
     def __len__(self):
         return len(self.pcd_paths)
@@ -34,7 +36,7 @@ class TanksAndTemples(Dataset):
     def __getitem__(self, idx):
         pcd_path = self.pcd_paths[idx]
         # img_path = self.img_paths[idx]
-        pcd = np.load(pcd_path)
+        pcd = np.load(os.path.join(self.pc_path_root, pcd_path))
         pcd = self.pc_norm(pcd)
         pcd = torch.from_numpy(pcd).float()
         # return pcd, image
