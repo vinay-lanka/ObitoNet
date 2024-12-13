@@ -126,11 +126,11 @@ class MAEEncoder(nn.Module):
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, x_vis, pos):
+    def forward(self, tokens, pos):
         # transformer
-        x_vis = self.blocks(x_vis, pos)
-        x_vis = self.norm(x_vis)
-        return x_vis
+        tokens = self.blocks(tokens, pos)
+        tokens = self.norm(tokens)
+        return tokens
 
 class Embedder(nn.Module):   ## Embedding module
     def __init__(self, encoder_channel):
@@ -263,13 +263,13 @@ class PCTokenizer (nn.Module):
 
         batch_size, seq_len, C = group_input_tokens.size()
 
-        x_vis = group_input_tokens[~bool_masked_pos].reshape(batch_size, -1, C)
+        tokens = group_input_tokens[~bool_masked_pos].reshape(batch_size, -1, C)
         # add pos embedding
         # mask pos center
         masked_center = center[~bool_masked_pos].reshape(batch_size, -1, 3)
         pos = self.pos_embed(masked_center)
 
-        return x_vis, pos, bool_masked_pos, center, neighborhood
+        return tokens, pos, bool_masked_pos, center, neighborhood
         
 
     def group_divider(self, xyz):
@@ -425,8 +425,8 @@ class ObitoNet (nn.Module):
     def forward(self, pts, vis = False, **kwargs):
         tokens, pos, bool_masked_pos, center, neighborhood = self.masked_pc_tokenizer(pts)
         tokens = self.MAE_encoder(tokens, pos)
-        x_vis, mask = tokens, bool_masked_pos
-        B,_,C = x_vis.shape # B VIS C
+        tokens, mask = tokens, bool_masked_pos
+        B,_,C = tokens.shape # B VIS C
 
         pos_emd_vis = self.decoder_pos_embed(center[~mask]).reshape(B, -1, C)
 
@@ -434,7 +434,7 @@ class ObitoNet (nn.Module):
 
         _,N,_ = pos_emd_mask.shape
         mask_token = self.mask_token.expand(B, N, -1)
-        x_full = torch.cat([x_vis, mask_token], dim=1)
+        x_full = torch.cat([tokens, mask_token], dim=1)
         pos_full = torch.cat([pos_emd_vis, pos_emd_mask], dim=1)
 
         x_rec = self.MAE_decoder(x_full, pos_full, N)
