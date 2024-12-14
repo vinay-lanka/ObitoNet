@@ -271,7 +271,6 @@ class PCTokenizer (nn.Module):
 
         return tokens, pos, bool_masked_pos, center, neighborhood
         
-
     def group_divider(self, xyz):
             '''
                 input: B N 3
@@ -337,7 +336,6 @@ class MAEDecoder(nn.Module):
 
         x = self.head(self.norm(x[:, -return_token_num:]))  # only return the mask tokens predict pixel
         return x
-
 
 class ObitoNet (nn.Module):
     def __init__(self, config):
@@ -423,32 +421,48 @@ class ObitoNet (nn.Module):
             self.apply(self._init_weights)  # Initialize weights if no checkpoint is provided
 
     def forward(self, pts, vis = False, **kwargs):
-        tokens, pos, bool_masked_pos, center, neighborhood = self.masked_pc_tokenizer(pts)
-        tokens = self.MAE_encoder(tokens, pos)
-        tokens, mask = tokens, bool_masked_pos
-        B,_,C = tokens.shape # B VIS C
+        # Extract tokens, and their knn position
+        # tokens_vis: Unmasked descriptor of the point cloud from PointNet++
+        # pos: xyz position of the knn cluster (learned)
+        # bool_masked_pos: Masked index position to be used before Encoding
+        # center: xyz position of the center of the knn cluster
+        # neighborhood: xyz position of all knn clusters
+        tokens_vis, pos, bool_masked_pos, center, neighborhood = self.masked_pc_tokenizer(pts)
+        
+        # Pass visible tokens through the Masked Encoder 
+        tokens_vis = self.MAE_encoder(tokens_vis, pos)
+        tokens_vis, mask = tokens_vis, bool_masked_pos
+        
+        ##### Black Box #####
+        B,_,C = tokens_vis.shape # B VIS C
 
+        # Pass masks through linear layer
         pos_emd_vis = self.decoder_pos_embed(center[~mask]).reshape(B, -1, C)
-
         pos_emd_mask = self.decoder_pos_embed(center[mask]).reshape(B, -1, C)
 
         _,N,_ = pos_emd_mask.shape
-        mask_token = self.mask_token.expand(B, N, -1)
-        x_full = torch.cat([tokens, mask_token], dim=1)
-        pos_full = torch.cat([pos_emd_vis, pos_emd_mask], dim=1)
+        tokens_masked = self.mask_token.expand(B, N, -1)
+        #####################
+        
+        # Concatenate the tokens
+        tokens_all = torch.cat([tokens_vis, tokens_masked], dim=1)
+        pos_all = torch.cat([pos_emd_vis, pos_emd_mask], dim=1)
 
-        x_rec = self.MAE_decoder(x_full, pos_full, N)
+        # Pass all tokens through Masked Decoder
+        tokens_recreated = self.MAE_decoder(tokens_all, pos_all, N)
 
-        B, M, C = x_rec.shape
-        rebuild_points = self.increase_dim(x_rec.transpose(1, 2)).transpose(1, 2).reshape(B * M, -1, 3)  # B M 1024
+        # Pass through reconstruction head
+        B, M, C = tokens_recreated.shape
+        pts_reconstructed = self.increase_dim(tokens_recreated.transpose(1, 2)).transpose(1, 2).reshape(B * M, -1, 3)  # B M 1024
 
+        # Extract ground truth points
         gt_points = neighborhood[mask].reshape(B*M,-1,3)
-        loss1 = self.loss_func(rebuild_points, gt_points)
+        loss1 = self.loss_func(pts_reconstructed, gt_points)
 
         if vis: #visualization
             vis_points = neighborhood[~mask].reshape(B * (self.num_groups - M), -1, 3)
             full_vis = vis_points + center[~mask].unsqueeze(1)
-            full_rebuild = rebuild_points + center[mask].unsqueeze(1)
+            full_rebuild = pts_reconstructed + center[mask].unsqueeze(1)
             full = torch.cat([full_vis, full_rebuild], dim=0)
             # full_points = torch.cat([rebuild_points,vis_points], dim=0)
             full_center = torch.cat([center[mask], center[~mask]], dim=0)
