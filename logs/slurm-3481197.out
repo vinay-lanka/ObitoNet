@@ -889,3 +889,40 @@ Save checkpoint at ./current_run/config/configs/nexustest/ckpt-last.pth
 [Epoch 289/300][Batch 1/4] BatchTime = 6.638 (s) DataTime = 5.700 (s) Losses = ['1.9653'] lr = 0.000005
 [Training] EPOCH: 289 EpochTime = 9.299 (s) Losses = ['1.8366'] lr = 0.000004
 Save checkpoint at ./current_run/config/configs/nexustest/ckpt-last.pth
+[Epoch 290/300][Batch 1/4] BatchTime = 7.016 (s) DataTime = 6.138 (s) Losses = ['1.8515'] lr = 0.000004
+[Training] EPOCH: 290 EpochTime = 9.697 (s) Losses = ['1.8222'] lr = 0.000004
+Save checkpoint at ./current_run/config/configs/nexustest/ckpt-last.pth
+[Epoch 291/300][Batch 1/4] BatchTime = 5.970 (s) DataTime = 5.097 (s) Losses = ['1.6899'] lr = 0.000004
+[Training] EPOCH: 291 EpochTime = 8.609 (s) Losses = ['1.6499'] lr = 0.000003
+Save checkpoint at ./current_run/config/configs/nexustest/ckpt-last.pth
+[Epoch 292/300][Batch 1/4] BatchTime = 6.975 (s) DataTime = 6.149 (s) Losses = ['1.4401'] lr = 0.000003
+[Training] EPOCH: 292 EpochTime = 9.685 (s) Losses = ['1.6130'] lr = 0.000003
+Save checkpoint at ./current_run/config/configs/nexustest/ckpt-last.pth
+[Epoch 293/300][Batch 1/4] BatchTime = 6.314 (s) DataTime = 5.472 (s) Losses = ['1.6685'] lr = 0.000003
+[Training] EPOCH: 293 EpochTime = 9.045 (s) Losses = ['1.4306'] lr = 0.000002
+Save checkpoint at ./current_run/config/configs/nexustest/ckpt-last.pth
+[Epoch 294/300][Batch 1/4] BatchTime = 7.767 (s) DataTime = 6.872 (s) Losses = ['2.2059'] lr = 0.000002
+[Training] EPOCH: 294 EpochTime = 10.417 (s) Losses = ['2.0150'] lr = 0.000002
+Save checkpoint at ./current_run/config/configs/nexustest/ckpt-last.pth
+[Epoch 295/300][Batch 1/4] BatchTime = 7.440 (s) DataTime = 6.558 (s) Losses = ['1.1766'] lr = 0.000002
+[Training] EPOCH: 295 EpochTime = 10.119 (s) Losses = ['1.6304'] lr = 0.000002
+Save checkpoint at ./current_run/config/configs/nexustest/ckpt-last.pth
+[Epoch 296/300][Batch 1/4] BatchTime = 6.137 (s) DataTime = 5.346 (s) Losses = ['1.5896'] lr = 0.000002
+[Training] EPOCH: 296 EpochTime = 8.797 (s) Losses = ['1.5255'] lr = 0.000001
+Save checkpoint at ./current_run/config/configs/nexustest/ckpt-last.pth
+[Epoch 297/300][Batch 1/4] BatchTime = 6.585 (s) DataTime = 5.750 (s) Losses = ['2.2711'] lr = 0.000001
+[Training] EPOCH: 297 EpochTime = 9.250 (s) Losses = ['1.7673'] lr = 0.000001
+Save checkpoint at ./current_run/config/configs/nexustest/ckpt-last.pth
+[Epoch 298/300][Batch 1/4] BatchTime = 6.685 (s) DataTime = 5.576 (s) Losses = ['1.6452'] lr = 0.000001
+[Training] EPOCH: 298 EpochTime = 9.373 (s) Losses = ['1.7487'] lr = 0.000001
+Save checkpoint at ./current_run/config/configs/nexustest/ckpt-last.pth
+[Epoch 299/300][Batch 1/4] BatchTime = 7.102 (s) DataTime = 6.224 (s) Losses = ['1.3804'] lr = 0.000001
+[Training] EPOCH: 299 EpochTime = 9.755 (s) Losses = ['1.6085'] lr = 0.000001
+Save checkpoint at ./current_run/config/configs/nexustest/ckpt-last.pth
+[Epoch 300/300][Batch 1/4] BatchTime = 6.650 (s) DataTime = 5.762 (s) Losses = ['1.3484'] lr = 0.000001
+[Training] EPOCH: 300 EpochTime = 9.272 (s) Losses = ['1.7048'] lr = 0.000001
+Save checkpoint at ./current_run/config/configs/nexustest/ckpt-last.pth
+Save checkpoint at ./current_run/config/configs/nexustest/ckpt-epoch-300.pth
+[1;34mwandb[0m: 🚀 View run [33mworthy-moon-5[0m at: [34mhttps://wandb.ai/apoorv10/obitonet/runs/a8d7wir8[0m
+[1;34mwandb[0m: Find logs at: [1;35mwandb/run-20241213_210602-a8d7wir8/logs[0m
+ran successfully
