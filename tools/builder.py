@@ -4,6 +4,7 @@ import torch.optim as optim
 from .TanksAndTemples import TanksAndTemples
 from utils.misc import *
 from models import ObitoNet
+from experiments.ply_image_CA import ObitoNetCA
 from utils.logging import *
 from timm.scheduler import CosineLRScheduler
 
@@ -28,6 +29,10 @@ def dataset_builder(args, config):
 
 def model_builder(config):
     model = ObitoNet.ObitoNet(config)
+    return model
+
+def experiment_model_builder(config):
+    model = ObitoNetCA.ObitoNet(config)
     return model
 
 

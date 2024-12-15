@@ -8,6 +8,7 @@ from utils.logging import *
 import random
 import numpy as np
 from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
+torch.autograd.set_detect_anomaly(True)
 
 ## Transformers
 class Mlp(nn.Module):
@@ -35,23 +36,47 @@ class Attention(nn.Module):
         head_dim = dim // num_heads
         # NOTE scale factor was wrong in my original version, can set manually to be compat with prev weights
         self.scale = qk_scale or head_dim ** -0.5
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias) # This is the learnable weight matrix W
         self.attn_drop = nn.Dropout(attn_drop)
-        self.proj = nn.Linear(dim, dim)
+        self.proj = nn.Linear(dim, dim) # This is the learnable weight matrix W'
         self.proj_drop = nn.Dropout(proj_drop)
 
     def forward(self, x):
+        """
+        Args:
+            x: torch.Tensor: (B, N, C)
+        Returns:
+            torch.Tensor: (B, N, C)
+
+        B = Batch size
+        N = Number of tokens
+        C = Embedding dimension
+
+        Note:
+            Self Attention mechanism for the Transformer model
+        """
+
+        # Get the shape of input tensor
         B, N, C = x.shape
-        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+
+        # Learnable Linear transformation for Q, K, V, x: (B, N, C) -> (B, N, 3C)
+        qkv = self.qkv(x)
+
+        # Reshape to (3, B, num_heads, N, C // num_heads)
+        qkv = qkv.reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+
+        # Split into Queries (q), Keys (k), and Values (v)
         q, k, v = qkv[0], qkv[1], qkv[2]   # make torchscript happy (cannot use tensor as tuple)
 
-        attn = (q @ k.transpose(-2, -1)) * self.scale
-        attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
+        # Attention matrix computation
+        attn = (q @ k.transpose(-2, -1)) * self.scale # QK^T / sqrt(d_k)
+        attn = attn.softmax(dim=-1) # Softmax(QK^T / sqrt(d_k))
+        attn = self.attn_drop(attn) # Dropout
 
-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
-        x = self.proj(x)
-        x = self.proj_drop(x)
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C) # Softmax(QK^T / sqrt(d_k)) * V
+        x = self.proj(x) # Learnable transformation
+        x = self.proj_drop(x) # Dropout
+
         return x
 
 class Block(nn.Module):
@@ -70,6 +95,17 @@ class Block(nn.Module):
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
         
     def forward(self, x):
+        """
+        Args:
+            x: torch.Tensor: (B, N, C)
+        Returns:
+            torch.Tensor: (B, N, C)
+
+        B = Batch size
+        N = Number of tokens
+        C = Embedding dimension
+        """
+        # NOTE: drop path can be removed to help overfitting to the data
         x = x + self.drop_path(self.attn(self.norm1(x)))
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
@@ -318,7 +354,7 @@ class MAEDecoder(nn.Module):
             for i in range(depth)])
         self.norm = norm_layer(embed_dim)
 
-        # Defined as Identity as a placeholder for the head
+        # Defined as Identity as a placeholder for the head, can be changed to Learnable Transformation
         self.head = nn.Identity()
 
         self.apply(self._init_weights)
@@ -332,13 +368,87 @@ class MAEDecoder(nn.Module):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    def forward(self, x, pos, return_token_num):
-        for _, block in enumerate(self.blocks):
-            # Processes input tensor x sequentially through self.blocks, adding positional embedding pos
-            x = block(x + pos)
+    def forward(self, x, return_token_num):
+        """
+        Args:
+            x: torch.Tensor: (B, N, C)
+        
+        Returns:
+            x: torch.Tensor: (B, N, C)
 
-        x = self.head(self.norm(x[:, -return_token_num:]))  # only return the mask tokens predict pixel
+        Note:
+            Encoder only Transformer model, which has 'depth' number of Encoder blocks
+        """
+
+        # Runs 'depth' times
+        for i, block in enumerate(self.blocks):
+            # print("i: ", i)
+            # 
+            x = block(x)
+
+        x = self.head(self.norm(x[:, -return_token_num:]))  # only return the first N tokens
         return x
+
+class CrossAttention(nn.Module):
+    def __init__(self, dim=384, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.):
+        super().__init__()
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = qk_scale or head_dim ** -0.5
+
+        self.W_x = nn.Linear(dim, dim * 3, bias=qkv_bias) # This is the learnable weight matrix W_x
+        self.W_y = nn.Linear(dim, dim * 3, bias=qkv_bias) # This is the learnable weight matrix W_y
+
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim) # This is the learnable weight matrix W'
+        self.proj_drop = nn.Dropout(proj_drop)
+
+    def forward(self, x, y):
+        """
+        Args:
+            x: torch.Tensor: (B, N, C)
+            y: torch.Tensor: (B, M, C)
+
+        Returns:
+            torch.Tensor: (B, N, C)
+
+        B = Batch size
+        N = Number of tokens
+        M = Number of tokens
+        C = Embedding dimension
+
+        Note:
+            Cross Attention between two sets of tokens x and y
+            Query Tensors taken from x
+            Key and Value Tensors taken from y
+        """
+
+        # Get the shape of input tensor 
+        B, N, C = x.shape 
+        _, M, _ = y.shape 
+
+        # Learnable Linear transformation for K, V, x: (B, N, C) -> (B, N, 3C)
+        x_qkv = self.W_x(x)
+        y_qkv = self.W_y(y)
+
+        # Reshape to (3, B, num_heads, N, C // num_heads)
+        x_qkv = x_qkv.reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        y_qkv = y_qkv.reshape(B, M, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+
+        # Split into Queries (q), Keys (k), and Values (v)
+        # q, k_,v_ = x_qkv[0], x_qkv[1], x_qkv[2]
+        # q_, k, v = y_qkv[0], y_qkv[1], y_qkv[2]
+
+        q, k_,v_ = torch.unbind(x_qkv, dim=0)
+        q_, k, v = torch.unbind(y_qkv, dim=0)
+
+        # Attention matrix computation
+        attn = (q @ k.transpose(-2, -1)) * self.scale # QK^T / sqrt(d_k)
+        attn = attn.softmax(dim=-1) # Softmax(QK^T / sqrt(d_k))
+        x_attn = (attn @ v).transpose(1, 2).reshape(B, N, C) # Softmax(QK^T / sqrt(d_k)) * V
+        x_attn = self.proj(x_attn) # Learnable transformation
+
+        return x_attn
 
 class ObitoNet (nn.Module):
     def __init__(self, config):
@@ -380,6 +490,9 @@ class ObitoNet (nn.Module):
         self.loss = config.loss
         # loss
         self.build_loss_func(self.loss)
+
+        # Cross Attention
+        self.cross_attn = CrossAttention()
 
     def build_loss_func(self, loss_type):
         if loss_type == "cdl1":
@@ -425,34 +538,44 @@ class ObitoNet (nn.Module):
 
     def forward(self, pts, vis = False, **kwargs):
         # Extract tokens, and their knn position
-        # tokens_vis: Unmasked descriptor of the point cloud from PointNet++
+        # feature_emb_vis: Unmasked descriptor of the point cloud from PointNet++
         # pos: xyz position of the knn cluster (learned)
         # bool_masked_pos: Masked index position to be used before Encoding
         # center: xyz position of the center of the knn cluster
         # neighborhood: xyz position of all knn clusters
-        tokens_vis, pos, bool_masked_pos, center, neighborhood = self.masked_pc_tokenizer(pts)
+        feature_emb_vis, feature_pos, bool_masked_pos, center, neighborhood = self.masked_pc_tokenizer(pts)
         
         # Pass visible tokens through the Masked Encoder 
-        tokens_vis = self.MAE_encoder(tokens_vis, pos)
-        tokens_vis, mask = tokens_vis, bool_masked_pos
+        feature_emb_vis = self.MAE_encoder(feature_emb_vis, feature_pos)
+        feature_emb_vis, mask = feature_emb_vis, bool_masked_pos
         
         ##### Black Box #####
-        B,_,C = tokens_vis.shape # B VIS C
+        B,_,C = feature_emb_vis.shape # B VIS C
 
         # Pass masks through linear layer
-        pos_emd_vis = self.decoder_pos_embed(center[~mask]).reshape(B, -1, C)
-        pos_emd_mask = self.decoder_pos_embed(center[mask]).reshape(B, -1, C)
+        pos_emb_vis = self.decoder_pos_embed(center[~mask]).reshape(B, -1, C)
+        pos_emb_mask = self.decoder_pos_embed(center[mask]).reshape(B, -1, C)
 
-        _,N,_ = pos_emd_mask.shape
+        _,N,_ = pos_emb_mask.shape
         tokens_masked = self.mask_token.expand(B, N, -1)
         #####################
         
-        # Concatenate the tokens
-        tokens_all = torch.cat([tokens_vis, tokens_masked], dim=1)
-        pos_all = torch.cat([pos_emd_vis, pos_emd_mask], dim=1)
+        # Concatenate the embeddings
+        feature_emb_all = torch.cat([feature_emb_vis, tokens_masked], dim=1)
+        pos_all = torch.cat([pos_emb_vis, pos_emb_mask], dim=1)
 
-        # Pass all tokens through Masked Decoder
-        tokens_recreated = self.MAE_decoder(tokens_all, pos_all, N)
+        # Create tokens: add feature embeddings and positional encoding
+        tokens = feature_emb_all + pos_all
+
+        # Print shape of feature_emb_all and pos_all
+        # print("feature_emb_all.shape: ", feature_emb_all.shape) # [1, 32, 384]
+        # print("pos_all.shape: ", pos_all.shape) # [1, 32, 384]
+
+        # Apply Cross Attention
+        tokens = self.cross_attn(tokens, tokens)
+
+        # Pass all embeddings through Masked Decoder
+        tokens_recreated = self.MAE_decoder(tokens, N)
 
         # Pass through reconstruction head
         B, M, C = tokens_recreated.shape
@@ -475,5 +598,6 @@ class ObitoNet (nn.Module):
             # return ret1, ret2
             return ret1, ret2, full_center
         else:
+            # print("vinay rand")
             return loss1
         
