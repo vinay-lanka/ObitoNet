@@ -8,7 +8,6 @@ from utils.logging import *
 import random
 import numpy as np
 from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
-torch.autograd.set_detect_anomaly(True)
 
 ## Transformers
 class Mlp(nn.Module):
@@ -106,8 +105,8 @@ class Block(nn.Module):
         C = Embedding dimension
         """
         # NOTE: drop path can be removed to help overfitting to the data
-        x = x + self.drop_path(self.attn(self.norm1(x)))
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
+        x += self.drop_path(self.attn(self.norm1(x)))
+        x += self.drop_path(self.mlp(self.norm2(x)))
         return x
 
 class TransformerEncoder(nn.Module):
@@ -382,7 +381,7 @@ class MAEDecoder(nn.Module):
 
         # Runs 'depth' times
         for i, block in enumerate(self.blocks):
-            # print("i: ", i)
+            print("i: ", i)
             # 
             x = block(x)
 
@@ -395,9 +394,9 @@ class CrossAttention(nn.Module):
         self.num_heads = num_heads
         head_dim = dim // num_heads
         self.scale = qk_scale or head_dim ** -0.5
-
-        self.W_x = nn.Linear(dim, dim * 3, bias=qkv_bias) # This is the learnable weight matrix W_x
-        self.W_y = nn.Linear(dim, dim * 3, bias=qkv_bias) # This is the learnable weight matrix W_y
+        
+        self.W_kv = nn.Linear(dim, dim * 2, bias=qkv_bias) # This is the learnable weight matrix W_kv
+        self.W_q = nn.Linear(dim, dim, bias=qkv_bias) # This is the learnable weight matrix W_q
 
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim) # This is the learnable weight matrix W'
@@ -419,36 +418,44 @@ class CrossAttention(nn.Module):
 
         Note:
             Cross Attention between two sets of tokens x and y
-            Query Tensors taken from x
-            Key and Value Tensors taken from y
+            Query set: x
+            Key-Value set: y
         """
 
         # Get the shape of input tensor 
         B, N, C = x.shape 
         _, M, _ = y.shape 
 
-        # Learnable Linear transformation for K, V, x: (B, N, C) -> (B, N, 3C)
-        x_qkv = self.W_x(x)
-        y_qkv = self.W_y(y)
+        # Learnable Linear transformation for Q, K, V, x: (B, N, C) -> (B, N, C) 
+        q = self.W_q(x) 
 
-        # Reshape to (3, B, num_heads, N, C // num_heads)
-        x_qkv = x_qkv.reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-        y_qkv = y_qkv.reshape(B, M, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        # Learnable Linear transformation for Q, K, V, y: (B, M, C) -> (B, M, 2C)
+        kv = self.W_kv(y)
 
-        # Split into Queries (q), Keys (k), and Values (v)
-        # q, k_,v_ = x_qkv[0], x_qkv[1], x_qkv[2]
-        # q_, k, v = y_qkv[0], y_qkv[1], y_qkv[2]
+        # Reshape
+        q = q.reshape(B, N, 1, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        kv, = kv.reshape(B, M, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
 
-        q, k_,v_ = torch.unbind(x_qkv, dim=0)
-        q_, k, v = torch.unbind(y_qkv, dim=0)
+        # Split into Keys (k) and Values (v)
+        k, v = kv[0], kv[1]   # make torchscript happy (cannot use tensor as tuple)
 
         # Attention matrix computation
         attn = (q @ k.transpose(-2, -1)) * self.scale # QK^T / sqrt(d_k)
         attn = attn.softmax(dim=-1) # Softmax(QK^T / sqrt(d_k))
-        x_attn = (attn @ v).transpose(1, 2).reshape(B, N, C) # Softmax(QK^T / sqrt(d_k)) * V
-        x_attn = self.proj(x_attn) # Learnable transformation
 
-        return x_attn
+        # Dropout
+        # attn = self.attn_drop(attn)
+
+        # Compute the output
+        tokens = (attn @ v).transpose(1, 2).reshape(B, N, C) # Softmax(QK^T / sqrt(d_k)) * V
+
+        # Learnable transformation
+        tokens = self.proj(tokens)
+
+        # Dropout
+        # tokens = self.proj_drop(tokens)
+
+        return tokens
 
 class ObitoNet (nn.Module):
     def __init__(self, config):
@@ -572,7 +579,7 @@ class ObitoNet (nn.Module):
         # print("pos_all.shape: ", pos_all.shape) # [1, 32, 384]
 
         # Apply Cross Attention
-        tokens = self.cross_attn(tokens, tokens)
+        # tokens = self.cross_attn(tokens, tokens)
 
         # Pass all embeddings through Masked Decoder
         tokens_recreated = self.MAE_decoder(tokens, N)
@@ -598,6 +605,6 @@ class ObitoNet (nn.Module):
             # return ret1, ret2
             return ret1, ret2, full_center
         else:
-            # print("vinay rand")
+            print("vinay rand")
             return loss1
         

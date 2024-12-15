@@ -35,3 +35,9 @@ python main_vis.py --test --ckpts <path/to/pre-trained/model> --config configs/c
 For uniform downsampling, I used different k_values for different data-subsets, as some values were giving us samples less than 16k (less than fps output)
 k = 100 (for all)
 k = 20 (for caterpillar)
+
+### 
+To run the terminal interactively:
+```bash
+bash-4.4$ srun --gres=gpu:rtxa5000:4 --account=class --partition=class --qos high -t 1-00:00:00 --mem-per-cpu=64gb --pty bash -i
+```

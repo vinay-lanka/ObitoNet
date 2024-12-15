@@ -5,3 +5,4 @@ utils/__pycache__
 current_run/
 tfboard/
 vis/
+logs/
