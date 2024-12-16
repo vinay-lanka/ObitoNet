@@ -27,14 +27,22 @@ def dataset_builder(args, config):
                                                 worker_init_fn=worker_init_fn)
     return sampler, dataloader
 
+# <TODO> Remove when we split obitonet into ca and pc and img (built seperately)
 def model_builder(config):
     model = ObitoNet.ObitoNet(config)
+    return model
+
+def obitonet_pc_builder(config):
+    model = ObitoNet.ObitoNet_PC(config)
+    return model
+
+def obitonet_ca_builder(config):
+    model = ObitoNet.ObitoNet_CA(config)
     return model
 
 def experiment_model_builder(config):
     model = ObitoNetCA.ObitoNet(config)
     return model
-
 
 def build_opti_sche(base_model, config):
     opti_config = config.optimizer
@@ -90,8 +98,16 @@ def build_opti_sche(base_model, config):
     
     return optimizer, scheduler
 
-def resume_model(base_model, args, logger = None):
-    ckpt_path = os.path.join(args.experiment_path, 'ckpt-last.pth')
+def resume_model(base_model, model, args, logger = None):
+    if model == 'ObitoNet_PC':
+        ckpt_path = os.path.join(args.experiment_path, 'obitonet_pc_ckpt-last.pth')
+    elif model == 'ObitoNet_IMG':
+        ckpt_path = os.path.join(args.experiment_path, 'obitonet_img_ckpt-last.pth')
+    elif model == 'ObitoNet_CA':
+        ckpt_path = os.path.join(args.experiment_path, 'obitonet_ca_ckpt-last.pth')
+    else:
+        raise NotImplementedError
+    
     if not os.path.exists(ckpt_path):
         print_log(f'[RESUME INFO] no checkpoint file from path {ckpt_path}...', logger = logger)
         return 0, 0
@@ -107,16 +123,19 @@ def resume_model(base_model, args, logger = None):
 
     # parameter
     start_epoch = state_dict['epoch'] + 1
-    best_metrics = state_dict['best_metrics']
-    if not isinstance(best_metrics, dict):
-        best_metrics = best_metrics.state_dict()
-    # print(best_metrics)
+    print_log(f'[RESUME INFO] resume ckpts @ {start_epoch - 1}', logger = logger)
+    return start_epoch
 
-    print_log(f'[RESUME INFO] resume ckpts @ {start_epoch - 1} epoch( best_metrics = {str(best_metrics):s})', logger = logger)
-    return start_epoch, best_metrics
-
-def resume_optimizer(optimizer, args, logger = None):
-    ckpt_path = os.path.join(args.experiment_path, 'ckpt-last.pth')
+def resume_optimizer(optimizer, model, args, logger = None):
+    if model == 'ObitoNet_PC':
+        ckpt_path = os.path.join(args.experiment_path, 'obitonet_pc_ckpt-last.pth')
+    elif model == 'ObitoNet_IMG':
+        ckpt_path = os.path.join(args.experiment_path, 'obitonet_img_ckpt-last.pth')
+    elif model == 'ObitoNet_CA':
+        ckpt_path = os.path.join(args.experiment_path, 'obitonet_ca_ckpt-last.pth')
+    else:
+        raise NotImplementedError
+    
     if not os.path.exists(ckpt_path):
         print_log(f'[RESUME INFO] no checkpoint file from path {ckpt_path}...', logger = logger)
         return 0, 0, 0
@@ -126,18 +145,25 @@ def resume_optimizer(optimizer, args, logger = None):
     # optimizer
     optimizer.load_state_dict(state_dict['optimizer'])
 
-def save_checkpoint(base_model, optimizer, epoch, metrics, best_metrics, prefix, args, logger = None):
+def save_checkpoint(base_model, optimizer, epoch, prefix, args, logger = None):
     if args.local_rank == 0:
         torch.save({
                     'base_model' : base_model.module.state_dict() if args.distributed else base_model.state_dict(),
                     'optimizer' : optimizer.state_dict(),
                     'epoch' : epoch,
-                    'metrics' : metrics.state_dict() if metrics is not None else dict(),
-                    'best_metrics' : best_metrics.state_dict() if best_metrics is not None else dict(),
                     }, os.path.join(args.experiment_path, prefix + '.pth'))
         print_log(f"Save checkpoint at {os.path.join(args.experiment_path, prefix + '.pth')}", logger = logger)
 
-def load_model(base_model, ckpt_path, logger = None):
+def load_model(base_model, model, args, logger = None):
+    if model == 'ObitoNet_PC':
+        ckpt_path = os.path.join(args.experiment_path, 'obitonet_pc_ckpt-last.pth')
+    elif model == 'ObitoNet_IMG':
+        ckpt_path = os.path.join(args.experiment_path, 'obitonet_img_ckpt-last.pth')
+    elif model == 'ObitoNet_CA':
+        ckpt_path = os.path.join(args.experiment_path, 'obitonet_ca_ckpt-last.pth')
+    else:
+        raise NotImplementedError
+    
     if not os.path.exists(ckpt_path):
         raise NotImplementedError('no checkpoint file from path %s...' % ckpt_path)
     print_log(f'Loading weights from {ckpt_path}...', logger = logger )

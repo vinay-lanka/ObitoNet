@@ -5,6 +5,7 @@ from timm.models.layers import DropPath, trunc_normal_
 from pointnet2_ops import pointnet2_utils
 from knn_cuda import KNN
 from utils.logging import *
+from utils.checkpoint import get_missing_parameters_message, get_unexpected_parameters_message
 import random
 import numpy as np
 from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
@@ -450,26 +451,17 @@ class CrossAttention(nn.Module):
 
         return x_attn
 
-class ObitoNet (nn.Module):
+class ObitoNet_CA(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.group_size = 64
-        self.num_groups = 32
         self.trans_dim = config.transformer_config.trans_dim
-        self.drop_path_rate = config.transformer_config.drop_path_rate
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, self.trans_dim))
 
-        self.masked_pc_tokenizer = PCTokenizer(config, self.num_groups, self.group_size)
-        
-        self.MAE_encoder = MAEEncoder(config)
+        # Cross Attention
+        self.cross_attn = CrossAttention()
 
-        self.decoder_pos_embed = nn.Sequential(
-            nn.Linear(3, 128),
-            nn.GELU(),
-            nn.Linear(128, self.trans_dim)
-        )
-
+        #MAE Decoder
         self.decoder_depth = config.transformer_config.decoder_depth
+        self.drop_path_rate = config.transformer_config.drop_path_rate
         self.decoder_num_heads = config.transformer_config.decoder_num_heads
         dpr = [x.item() for x in torch.linspace(0, self.drop_path_rate, self.decoder_depth)]
         self.MAE_decoder = MAEDecoder(
@@ -479,20 +471,169 @@ class ObitoNet (nn.Module):
             num_heads=self.decoder_num_heads,
         )
 
-        # reconstruction head
+        #Reconstruction head
+        self.group_size = config.group_size
         self.increase_dim = nn.Sequential(
             # nn.Conv1d(self.trans_dim, 1024, 1),
             # nn.BatchNorm1d(1024),
             # nn.LeakyReLU(negative_slope=0.2),
             nn.Conv1d(self.trans_dim, 3*self.group_size, 1)
         )
+    
+    def load_model_from_ckpt(self, ckpt_path):
+        """
+        Loads pretrained weights into the Point_MAE model for continued training.
+
+        Args:
+            ckpt_path (str): Path to the checkpoint file.
+
+        Raises:
+            FileNotFoundError: If the checkpoint file is not found.
+        """
+        if ckpt_path is not None:
+            print_log(f"Loading checkpoint from {ckpt_path}...", logger="Point_MAE")
+            try:
+                ckpt = torch.load(ckpt_path, map_location="cpu")  # Load checkpoint
+                state_dict = ckpt['model'] if 'model' in ckpt else ckpt
+
+                # Load state_dict into the model
+                incompatible = self.load_state_dict(state_dict, strict=False)
+
+                # Log missing and unexpected keys
+                if incompatible.missing_keys:
+                    print_log(f"Missing keys: {get_missing_parameters_message(incompatible.missing_keys)}", logger="Point_MAE")
+                if incompatible.unexpected_keys:
+                    print_log(f"Unexpected keys: {get_unexpected_parameters_message(incompatible.unexpected_keys)}", logger="Point_MAE")
+
+                print_log(f"Checkpoint successfully loaded from {ckpt_path}", logger="Point_MAE")
+            except FileNotFoundError:
+                print_log(f"Checkpoint file not found: {ckpt_path}", logger="Point_MAE")
+                raise FileNotFoundError(f"Checkpoint file not found: {ckpt_path}")
+        else:
+            print_log("No checkpoint path provided. Training from scratch.", logger="Point_MAE")
+            self.apply(self._init_weights)  # Initialize weights if no checkpoint is provided
+
+    def forward(self, tokens, N, **kwargs):
+        # Apply Cross Attention
+        tokens = self.cross_attn(tokens, tokens)
+
+        # Pass all embeddings through Masked Decoder
+        tokens_recreated = self.MAE_decoder(tokens, N)
+
+        # Pass through reconstruction head
+        B, M, C = tokens_recreated.shape
+        pts_reconstructed = self.increase_dim(tokens_recreated.transpose(1, 2)).transpose(1, 2).reshape(B * M, -1, 3)  # B M 1024
+        return pts_reconstructed, B, M 
+
+class ObitoNet_PC(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        #Point Cloud Tokenizer
+        self.group_size = config.group_size
+        self.num_groups = config.num_group
+        self.masked_pc_tokenizer = PCTokenizer(config, self.num_groups, self.group_size)
+
+        #Point Cloud Masked AutoEncoder
+        self.trans_dim = config.transformer_config.trans_dim
+        self.MAE_encoder = MAEEncoder(config)
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, self.trans_dim))
+        self.decoder_pos_embed = nn.Sequential(
+            nn.Linear(3, 128),
+            nn.GELU(),
+            nn.Linear(128, self.trans_dim)
+        )
+    
+    def load_model_from_ckpt(self, ckpt_path):
+        """
+        Loads pretrained weights into the Point_MAE model for continued training.
+
+        Args:
+            ckpt_path (str): Path to the checkpoint file.
+
+        Raises:
+            FileNotFoundError: If the checkpoint file is not found.
+        """
+        if ckpt_path is not None:
+            print_log(f"Loading checkpoint from {ckpt_path}...", logger="Point_MAE")
+            try:
+                ckpt = torch.load(ckpt_path, map_location="cpu")  # Load checkpoint
+                state_dict = ckpt['model'] if 'model' in ckpt else ckpt
+
+                # Load state_dict into the model
+                incompatible = self.load_state_dict(state_dict, strict=False)
+
+                # Log missing and unexpected keys
+                if incompatible.missing_keys:
+                    print_log(f"Missing keys: {get_missing_parameters_message(incompatible.missing_keys)}", logger="Point_MAE")
+                if incompatible.unexpected_keys:
+                    print_log(f"Unexpected keys: {get_unexpected_parameters_message(incompatible.unexpected_keys)}", logger="Point_MAE")
+
+                print_log(f"Checkpoint successfully loaded from {ckpt_path}", logger="Point_MAE")
+            except FileNotFoundError:
+                print_log(f"Checkpoint file not found: {ckpt_path}", logger="Point_MAE")
+                raise FileNotFoundError(f"Checkpoint file not found: {ckpt_path}")
+        else:
+            print_log("No checkpoint path provided. Training from scratch.", logger="Point_MAE")
+            self.apply(self._init_weights)  # Initialize weights if no checkpoint is provided
+
+    def forward(self, pts, **kwargs):
+        # Extract tokens, and their knn position
+        # feature_emb_vis: Unmasked descriptor of the point cloud from PointNet++
+        # pos: xyz position of the knn cluster (learned)
+        # bool_masked_pos: Masked index position to be used before Encoding
+        # center: xyz position of the center of the knn cluster
+        # neighborhood: xyz position of all knn clusters
+        feature_emb_vis, feature_pos, bool_masked_pos, center, neighborhood = self.masked_pc_tokenizer(pts)
+        
+        # Pass visible tokens through the Masked Encoder 
+        feature_emb_vis = self.MAE_encoder(feature_emb_vis, feature_pos)
+        feature_emb_vis, mask = feature_emb_vis, bool_masked_pos
+        
+        ##### Black Box #####
+        B,_,C = feature_emb_vis.shape # B VIS C
+
+        # Pass masks through linear layer
+        pos_emb_vis = self.decoder_pos_embed(center[~mask]).reshape(B, -1, C)
+        pos_emb_mask = self.decoder_pos_embed(center[mask]).reshape(B, -1, C)
+
+        _,N,_ = pos_emb_mask.shape
+        tokens_masked = self.mask_token.expand(B, N, -1)
+        #####################
+        
+        # Concatenate the embeddings
+        feature_emb_all = torch.cat([feature_emb_vis, tokens_masked], dim=1)
+        pos_all = torch.cat([pos_emb_vis, pos_emb_mask], dim=1)
+
+        # Create tokens: add feature embeddings and positional encoding
+        tokens = feature_emb_all + pos_all
+
+        # Print shape of feature_emb_all and pos_all
+        # print("feature_emb_all.shape: ", feature_emb_all.shape) # [1, 32, 384]
+        # print("pos_all.shape: ", pos_all.shape) # [1, 32, 384]
+
+        # Return tokens, number of tokens
+        return tokens, N, mask, center, neighborhood
+
+class ObitoNet (nn.Module):
+    def __init__(self, config, ObitoNet_PC, ObitoNet_CA):
+        super().__init__()
+
+        #Point Cloud Encoder
+        self.obitonet_pc = ObitoNet_PC
+
+        #<TODO> Image Encoder
+        # self.obitonet_img = ObitoNet_IMG
+
+        #Cross Attention Decoder
+        self.obitonet_ca = ObitoNet_CA
+
+        #Training Loss
+        self.trans_dim = config.transformer_config.trans_dim
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, self.trans_dim))
         trunc_normal_(self.mask_token, std=.02)
         self.loss = config.loss
         # loss
         self.build_loss_func(self.loss)
-
-        # Cross Attention
-        self.cross_attn = CrossAttention()
 
     def build_loss_func(self, loss_type):
         if loss_type == "cdl1":
@@ -537,49 +678,13 @@ class ObitoNet (nn.Module):
             self.apply(self._init_weights)  # Initialize weights if no checkpoint is provided
 
     def forward(self, pts, vis = False, **kwargs):
-        # Extract tokens, and their knn position
-        # feature_emb_vis: Unmasked descriptor of the point cloud from PointNet++
-        # pos: xyz position of the knn cluster (learned)
-        # bool_masked_pos: Masked index position to be used before Encoding
-        # center: xyz position of the center of the knn cluster
-        # neighborhood: xyz position of all knn clusters
-        feature_emb_vis, feature_pos, bool_masked_pos, center, neighborhood = self.masked_pc_tokenizer(pts)
-        
-        # Pass visible tokens through the Masked Encoder 
-        feature_emb_vis = self.MAE_encoder(feature_emb_vis, feature_pos)
-        feature_emb_vis, mask = feature_emb_vis, bool_masked_pos
-        
-        ##### Black Box #####
-        B,_,C = feature_emb_vis.shape # B VIS C
+        # Extract encoded PC tokens from the ObitoNet Point Cloud Arm
+        encoded_pc_tokens, N, mask, center, neighborhood  = self.obitonet_pc(pts)
 
-        # Pass masks through linear layer
-        pos_emb_vis = self.decoder_pos_embed(center[~mask]).reshape(B, -1, C)
-        pos_emb_mask = self.decoder_pos_embed(center[mask]).reshape(B, -1, C)
+        #<TODO> Extract encoded img tokens from the ObitoNet Image Arm
+        # encoded_img_tokens = self.obitonet_img(img)
 
-        _,N,_ = pos_emb_mask.shape
-        tokens_masked = self.mask_token.expand(B, N, -1)
-        #####################
-        
-        # Concatenate the embeddings
-        feature_emb_all = torch.cat([feature_emb_vis, tokens_masked], dim=1)
-        pos_all = torch.cat([pos_emb_vis, pos_emb_mask], dim=1)
-
-        # Create tokens: add feature embeddings and positional encoding
-        tokens = feature_emb_all + pos_all
-
-        # Print shape of feature_emb_all and pos_all
-        # print("feature_emb_all.shape: ", feature_emb_all.shape) # [1, 32, 384]
-        # print("pos_all.shape: ", pos_all.shape) # [1, 32, 384]
-
-        # Apply Cross Attention
-        tokens = self.cross_attn(tokens, tokens)
-
-        # Pass all embeddings through Masked Decoder
-        tokens_recreated = self.MAE_decoder(tokens, N)
-
-        # Pass through reconstruction head
-        B, M, C = tokens_recreated.shape
-        pts_reconstructed = self.increase_dim(tokens_recreated.transpose(1, 2)).transpose(1, 2).reshape(B * M, -1, 3)  # B M 1024
+        pts_reconstructed, B, M = self.obitonet_ca(encoded_pc_tokens, N)
 
         # Extract ground truth points
         gt_points = neighborhood[mask].reshape(B*M,-1,3)
@@ -598,6 +703,5 @@ class ObitoNet (nn.Module):
             # return ret1, ret2
             return ret1, ret2, full_center
         else:
-            # print("vinay rand")
             return loss1
         
