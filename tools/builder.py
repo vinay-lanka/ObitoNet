@@ -33,11 +33,15 @@ def model_builder(config):
     return model
 
 def obitonet_pc_builder(config):
-    model = ObitoNet.ObitoNet_PC(config)
+    model = ObitoNet.ObitoNetPC(config)
+    return model
+
+def obitonet_img_builder(config):
+    model = ObitoNet.ObitoNetImg(config)
     return model
 
 def obitonet_ca_builder(config):
-    model = ObitoNet.ObitoNet_CA(config)
+    model = ObitoNet.ObitoNetCA(config)
     return model
 
 def experiment_model_builder(config):
@@ -99,11 +103,11 @@ def build_opti_sche(base_model, config):
     return optimizer, scheduler
 
 def resume_model(base_model, model, args, logger = None):
-    if model == 'ObitoNet_PC':
+    if model == 'ObitoNetPC':
         ckpt_path = os.path.join(args.experiment_path, 'obitonet_pc_ckpt-last.pth')
-    elif model == 'ObitoNet_IMG':
+    elif model == 'ObitoNetImg':
         ckpt_path = os.path.join(args.experiment_path, 'obitonet_img_ckpt-last.pth')
-    elif model == 'ObitoNet_CA':
+    elif model == 'ObitoNetCA':
         ckpt_path = os.path.join(args.experiment_path, 'obitonet_ca_ckpt-last.pth')
     else:
         raise NotImplementedError
@@ -127,11 +131,11 @@ def resume_model(base_model, model, args, logger = None):
     return start_epoch
 
 def resume_optimizer(optimizer, model, args, logger = None):
-    if model == 'ObitoNet_PC':
+    if model == 'ObitoNetPC':
         ckpt_path = os.path.join(args.experiment_path, 'obitonet_pc_ckpt-last.pth')
-    elif model == 'ObitoNet_IMG':
+    elif model == 'ObitoNetImg':
         ckpt_path = os.path.join(args.experiment_path, 'obitonet_img_ckpt-last.pth')
-    elif model == 'ObitoNet_CA':
+    elif model == 'ObitoNetCA':
         ckpt_path = os.path.join(args.experiment_path, 'obitonet_ca_ckpt-last.pth')
     else:
         raise NotImplementedError
@@ -155,11 +159,11 @@ def save_checkpoint(base_model, optimizer, epoch, prefix, args, logger = None):
         print_log(f"Save checkpoint at {os.path.join(args.experiment_path, prefix + '.pth')}", logger = logger)
 
 def load_model(base_model, model, args, logger = None):
-    if model == 'ObitoNet_PC':
+    if model == 'ObitoNetPC':
         ckpt_path = os.path.join(args.experiment_path, 'obitonet_pc_ckpt-last.pth')
-    elif model == 'ObitoNet_IMG':
+    elif model == 'ObitoNetImg':
         ckpt_path = os.path.join(args.experiment_path, 'obitonet_img_ckpt-last.pth')
-    elif model == 'ObitoNet_CA':
+    elif model == 'ObitoNetCA':
         ckpt_path = os.path.join(args.experiment_path, 'obitonet_ca_ckpt-last.pth')
     else:
         raise NotImplementedError

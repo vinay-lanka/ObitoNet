@@ -9,6 +9,10 @@ from utils.checkpoint import get_missing_parameters_message, get_unexpected_para
 import random
 import numpy as np
 from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
+
+from transformers import AutoImageProcessor, ViTModel, ViTConfig
+
+
 torch.autograd.set_detect_anomaly(True)
 
 ## Transformers
@@ -169,7 +173,7 @@ class MAEEncoder(nn.Module):
         tokens = self.norm(tokens)
         return tokens
 
-class Embedder(nn.Module):   ## Embedding module
+class Embedder(nn.Module):
     def __init__(self, encoder_channel):
         super().__init__()
         self.encoder_channel = encoder_channel
@@ -451,7 +455,7 @@ class CrossAttention(nn.Module):
 
         return x_attn
 
-class ObitoNet_CA(nn.Module):
+class ObitoNetCA(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.trans_dim = config.transformer_config.trans_dim
@@ -513,9 +517,9 @@ class ObitoNet_CA(nn.Module):
             print_log("No checkpoint path provided. Training from scratch.", logger="Point_MAE")
             self.apply(self._init_weights)  # Initialize weights if no checkpoint is provided
 
-    def forward(self, tokens, N, **kwargs):
-        # Apply Cross Attention
-        tokens = self.cross_attn(tokens, tokens)
+    def forward(self, pc_tokens, N, img_tokens, **kwargs):
+        # Apply Cross Attention to pointcloud and image tokens
+        tokens = self.cross_attn(pc_tokens, img_tokens)
 
         # Pass all embeddings through Masked Decoder
         tokens_recreated = self.MAE_decoder(tokens, N)
@@ -525,7 +529,7 @@ class ObitoNet_CA(nn.Module):
         pts_reconstructed = self.increase_dim(tokens_recreated.transpose(1, 2)).transpose(1, 2).reshape(B * M, -1, 3)  # B M 1024
         return pts_reconstructed, B, M 
 
-class ObitoNet_PC(nn.Module):
+class ObitoNetPC(nn.Module):
     def __init__(self, config):
         super().__init__()
         #Point Cloud Tokenizer
@@ -614,18 +618,52 @@ class ObitoNet_PC(nn.Module):
         # Return tokens, number of tokens
         return tokens, N, mask, center, neighborhood
 
-class ObitoNet (nn.Module):
-    def __init__(self, config, ObitoNet_PC, ObitoNet_CA):
+class ObitoNetImg(nn.Module):
+    """
+    Image Encoder for ObitoNet
+    Extracts image tokens from images
+    """
+    def __init__(self, config):
         super().__init__()
 
-        #Point Cloud Encoder
-        self.obitonet_pc = ObitoNet_PC
+        # Load ViT model configuration
+        self.configuration = ViTConfig(hidden_size=config.transformer_config.trans_dim,
+                                       patch_size=config.transformer_config.patch_size
+                                       )
 
-        #<TODO> Image Encoder
-        # self.obitonet_img = ObitoNet_IMG
+        # Load the image_processor
+        self.image_processor = AutoImageProcessor.from_pretrained(config.transformer_config.vit_model_name,
+                                                                  use_fast=True
+                                                                  )
 
-        #Cross Attention Decoder
-        self.obitonet_ca = ObitoNet_CA
+        # Load the ViT model
+        self.vit_model = ViTModel(config=self.configuration)
+    
+    def forward(self, img):
+        
+        # Preprocess the image
+        img_processed = self.image_processor(img, return_tensors="pt")
+
+        # Pass through the ViT model
+        output = self.vit_model(**img_processed)
+
+        # Extract image_tokens without CLS token
+        image_tokens = output.last_hidden_state[:, 1:, :]
+
+        return image_tokens
+      
+class ObitoNet(nn.Module):
+    def __init__(self, config, ObitoNetPC, ObitoNetImg, ObitoNetCA):
+        super().__init__()
+
+        # Point Cloud Encoder
+        self.obitonet_pc = ObitoNetPC
+
+        # Image Encoder
+        self.obitonet_img = ObitoNetImg
+
+        # Cross Attention Decoder
+        self.obitonet_ca = ObitoNetCA
 
         #Training Loss
         self.trans_dim = config.transformer_config.trans_dim
@@ -677,14 +715,33 @@ class ObitoNet (nn.Module):
             print_log("No checkpoint path provided. Training from scratch.", logger="Point_MAE")
             self.apply(self._init_weights)  # Initialize weights if no checkpoint is provided
 
-    def forward(self, pts, vis = False, **kwargs):
+    def forward(self, pts, img, vis = False, **kwargs):
+        """
+        Args:
+            pts: torch.Tensor: (B, N, 3)
+            img: torch.Tensor: (B, C, H, W)
+            vis: bool: Visualization flag
+
+        Returns:
+            torch.Tensor: (B, N, 3)
+
+        B = Batch size
+        N = Number of points
+        C = Number of channels
+        H = Height
+        W = Width
+        """
         # Extract encoded PC tokens from the ObitoNet Point Cloud Arm
-        encoded_pc_tokens, N, mask, center, neighborhood  = self.obitonet_pc(pts)
+        pc_tokens, N, mask, center, neighborhood  = self.obitonet_pc(pts)
 
-        #<TODO> Extract encoded img tokens from the ObitoNet Image Arm
-        # encoded_img_tokens = self.obitonet_img(img)
+        # Ensure img is in the correct shape (B, C, H, W)
+        if img.shape[-1] == 3:  # If last dimension is the channel
+            img = img.permute(0, 3, 1, 2)  # Convert to (B, C, H, W)
 
-        pts_reconstructed, B, M = self.obitonet_ca(encoded_pc_tokens, N)
+        # Extract encoded img tokens from the ObitoNet Image Arm
+        img_tokens = self.obitonet_img(img)
+
+        pts_reconstructed, B, M = self.obitonet_ca(pc_tokens, N, img_tokens)
 
         # Extract ground truth points
         gt_points = neighborhood[mask].reshape(B*M,-1,3)

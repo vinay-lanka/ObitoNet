@@ -36,11 +36,11 @@ class TanksAndTemples(Dataset):
 
     def __getitem__(self, idx):
         pcd_path = self.pcd_paths[idx]
-        # img_path = self.img_paths[idx]
-        # image = cv2.imread(os.path.join(self.pc_path_root, img_path))
-        # image = cv2.resize(image, (256, 256))
+        img_path = self.img_paths[idx]
+        image = cv2.imread(os.path.join(self.pc_path_root, img_path))
+        image = cv2.resize(image, (256, 256))
         pcd = np.load(os.path.join(self.pc_path_root, pcd_path))
         pcd = self.pc_norm(pcd)
         pcd = torch.from_numpy(pcd).float()
-        # return pcd, image
-        return pcd
+        return pcd, image
+        # return pcd
