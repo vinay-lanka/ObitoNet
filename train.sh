@@ -15,9 +15,9 @@
 #export NCCL_IB_DISABLE=1
 
 cd ~/
-source /fs/classhomes/fall2024/cmsc848k/c848k032/miniconda3/bin/activate obitonet
-cd /fs/classhomes/fall2024/cmsc848k/c848k032/ObitoNet
+source /fs/classhomes/fall2024/cmsc848k/c848k062/miniconda3/bin/activate obito_env
+cd /fs/classhomes/fall2024/cmsc848k/c848k062/ObitoNet
 module add cuda/11.8.0
 module add gcc/11.2.0
-srun -u python main.py --config configs/config.yaml --exp_name nexustest
+srun -u python main.py --config configs/config.yaml --start_ckpt_epoch 2 --exp_name nexustest
 echo "ran successfully"

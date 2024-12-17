@@ -461,7 +461,7 @@ class ObitoNetCA(nn.Module):
         self.trans_dim = config.transformer_config.trans_dim
 
         # Cross Attention
-        self.cross_attn = CrossAttention()
+        self.cross_attn = CrossAttention(dim=self.trans_dim)
 
         #MAE Decoder
         self.decoder_depth = config.transformer_config.decoder_depth
@@ -481,7 +481,7 @@ class ObitoNetCA(nn.Module):
             # nn.Conv1d(self.trans_dim, 1024, 1),
             # nn.BatchNorm1d(1024),
             # nn.LeakyReLU(negative_slope=0.2),
-            nn.Conv1d(self.trans_dim, 3*self.group_size, 1)
+            nn.Conv1d(self.trans_dim, 45*self.group_size, 1)
         )
     
     def load_model_from_ckpt(self, ckpt_path):
@@ -672,6 +672,8 @@ class ObitoNet(nn.Module):
         self.loss = config.loss
         # loss
         self.build_loss_func(self.loss)
+
+        self.num_groups = config.num_group        
 
     def build_loss_func(self, loss_type):
         if loss_type == "cdl1":

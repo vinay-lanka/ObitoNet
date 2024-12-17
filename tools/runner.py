@@ -6,6 +6,7 @@ from tools import builder
 from utils import misc, dist_utils
 import time
 from utils.logging import *
+from models.ObitoNet import ObitoNet
 
 import cv2
 import numpy as np
@@ -16,24 +17,37 @@ def test_net(args, config):
     print_log('Tester start ... ', logger = logger)
     _, test_dataloader = builder.dataset_builder(args, config.dataset.test)
 
-    base_model = builder.model_builder(config.model)
+    # base_model = builder.model_builder(config.model)
     # base_model.load_model_from_ckpt(args.ckpts)
-    builder.load_model(base_model, args.ckpts, logger = logger)
+
+    # Build Point Cloud Encoder
+    obitonet_pc = builder.obitonet_pc_builder(config.model)
+    #<TODO> Build Image Encoder
+    obitonet_img = builder.obitonet_img_builder(config.model)
+    # Build Cross Attention Decoder
+    obitonet_ca = builder.obitonet_ca_builder(config.model)
+    # Build ObitoNet
+    obitonet = ObitoNet(config.model, obitonet_pc, obitonet_img, obitonet_ca)
+
+    # builder.load_model(base_model, args.ckpts, logger = logger)
+    builder.load_model(obitonet_pc, 'ObitoNetPC', args, logger = logger)
+    builder.load_model(obitonet_img, 'ObitoNetImg', args, logger = logger)
+    builder.load_model(obitonet_ca, 'ObitoNetCA', args, logger = logger)
 
     if args.use_gpu:
-        base_model.to(args.local_rank)
+        obitonet.to(args.local_rank)
 
     #  DDP
     if args.distributed:
         raise NotImplementedError()
 
-    test(base_model, test_dataloader, args, config, logger=logger)
+    test(obitonet, test_dataloader, args, config, logger=logger)
 
 
 # visualization
-def test(base_model, test_dataloader, args, config, logger = None):
+def test(obitonet, test_dataloader, args, config, logger = None):
 
-    base_model.eval()  # set model to eval mode
+    obitonet.eval()  # set model to eval mode
     target = './vis'
     useful_cate = [
         "02691156", #plane
@@ -49,7 +63,7 @@ def test(base_model, test_dataloader, args, config, logger = None):
         "03759954", # microphone
     ]
     with torch.no_grad():
-        for idx, (data) in enumerate(test_dataloader):
+        for idx, (data, img) in enumerate(test_dataloader):
             # import pdb; pdb.set_trace()
             # if  taxonomy_ids[0] not in useful_cate:
             #     continue
@@ -72,11 +86,12 @@ def test(base_model, test_dataloader, args, config, logger = None):
             dataset_name = config.dataset.test._base_.NAME
             # if dataset_name == 'ShapeNet':
             points = data.cuda()
+            img = img.cuda()
             # else:
             #     raise NotImplementedError(f'Train phase do not support {dataset_name}')
 
             # dense_points, vis_points = base_model(points, vis=True)
-            dense_points, vis_points, centers= base_model(points, vis=True)
+            dense_points, vis_points, centers= obitonet(points, img, vis=True)
             final_image = []
             data_path = f'./vis/'
             if not os.path.exists(data_path):
@@ -104,7 +119,7 @@ def test(base_model, test_dataloader, args, config, logger = None):
             final_image.append(dense_points[150:650,150:675,:])
 
             img = np.concatenate(final_image, axis=1)
-            img_path = os.path.join(data_path, f'plot.jpg')
+            img_path = os.path.join(data_path, f'plot_{idx:04d}.jpg')
             cv2.imwrite(img_path, img)
 
             if idx > 1500:
