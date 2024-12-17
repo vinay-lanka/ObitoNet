@@ -188,14 +188,14 @@ def train(args, config, device, train_writer=None, val_writer=None):
                 num_iter = 0
 
                 # Update the weights
-                # pc_optimizer.step()
+                pc_optimizer.step()
                 img_optimizer.step()
-                # ca_optimizer.step()
+                ca_optimizer.step()
 
                 # Set the gradient to zero
-                # obitonet_pc.zero_grad()
+                obitonet_pc.zero_grad()
                 obitonet_img.zero_grad()
-                # obitonet_ca.zero_grad()
+                obitonet_ca.zero_grad()
 
             if args.distributed:
                 loss = dist_utils.reduce_tensor(loss, args)
@@ -221,11 +221,12 @@ def train(args, config, device, train_writer=None, val_writer=None):
                 print_log('[Epoch %d/%d][Batch %d/%d] BatchTime = %.3f (s) DataTime = %.3f (s) Losses = %s pc_lr = %.6f ca_lr = %.6f' %
                             (epoch, config.max_epoch, idx + 1, n_batches, batch_time.val(), data_time.val(),
                             ['%.4f' % l for l in losses.val()], pc_optimizer.param_groups[0]['lr'], ca_optimizer.param_groups[0]['lr']), logger = logger)
-        # if isinstance(pc_scheduler, list):
-        #     for item in pc_scheduler:
-        #         item.step(epoch)
-        # else:
-        #     pc_scheduler.step(epoch)
+        
+        if isinstance(pc_scheduler, list):
+            for item in pc_scheduler:
+                item.step(epoch)
+        else:
+            pc_scheduler.step(epoch)
 
         if isinstance(img_scheduler, list):
             for item in img_scheduler:
@@ -233,17 +234,21 @@ def train(args, config, device, train_writer=None, val_writer=None):
         else:
             img_scheduler.step(epoch)
 
-        # if isinstance(ca_scheduler, list):
-        #     for item in ca_scheduler:
-        #         item.step(epoch)
-        # else:
-        #     ca_scheduler.step(epoch)
+        if isinstance(ca_scheduler, list):
+            for item in ca_scheduler:
+                item.step(epoch)
+        else:
+            ca_scheduler.step(epoch)
 
 
         epoch_end_time = time.time()
         
         # log metrics to wandb
-        wandb.log({"loss": losses.avg(0), "losses":['%.4f' % l for l in losses.avg()], "pc_encoder_lr":pc_optimizer.param_groups[0]['lr'], "ca_decoder_lr":ca_optimizer.param_groups[0]['lr']})
+        wandb.log({"loss": losses.avg(0), 
+                    "losses":['%.4f' % l for l in losses.avg()],
+                    "pc_encoder_lr":pc_optimizer.param_groups[0]['lr'], 
+                    "img_encoder_lr":img_optimizer.param_groups[0]['lr'],
+                    "ca_decoder_lr":ca_optimizer.param_groups[0]['lr']})
 
         if train_writer is not None:
             train_writer.add_scalar('Loss/Epoch/Loss_1', losses.avg(0), epoch)
@@ -251,22 +256,21 @@ def train(args, config, device, train_writer=None, val_writer=None):
             (epoch,  epoch_end_time - epoch_start_time, ['%.4f' % l for l in losses.avg()],
              pc_optimizer.param_groups[0]['lr'], ca_optimizer.param_groups[0]['lr']), logger = logger)
 
+        if epoch % 50 == 0:
+            builder.save_checkpoint(obitonet_pc, pc_optimizer, epoch, 'obitonet_pc_ckpt-last', args, logger = logger)
+            builder.save_checkpoint(obitonet_img, img_optimizer, epoch, 'obitonet_img_ckpt-last', args, logger = logger)
+            builder.save_checkpoint(obitonet_ca, ca_optimizer, epoch, 'obitonet_ca_ckpt-last', args, logger = logger)
+            wandb.save(os.path.join(args.experiment_path, 'obitonet_pc_ckpt-last.pth'))
+            wandb.save(os.path.join(args.experiment_path, 'obitonet_img_ckpt-last.pth'))
+            wandb.save(os.path.join(args.experiment_path, 'obitonet_ca_ckpt-last.pth'))
 
-        builder.save_checkpoint(obitonet_pc, pc_optimizer, epoch, 'obitonet_pc_ckpt-last', args, logger = logger)
-        builder.save_checkpoint(obitonet_img, img_optimizer, epoch, 'obitonet_img_ckpt-last', args, logger = logger)
-        builder.save_checkpoint(obitonet_ca, ca_optimizer, epoch, 'obitonet_ca_ckpt-last', args, logger = logger)
- 
-        # #TODO WANDB
-        wandb.save(os.path.join(args.experiment_path, 'obitonet_pc_ckpt-last.pth'))
-        wandb.save(os.path.join(args.experiment_path, 'obitonet_img_ckpt.pth'))
-        wandb.save(os.path.join(args.experiment_path, 'obitonet_ca_ckpt-last.pth'))
-        if epoch % 25 ==0 and epoch >=250:
-            builder.save_checkpoint(obitonet_pc, pc_optimizer, epoch, 'obitonet_pc_ckpt-epoch-{epoch:03d}', args, logger = logger)
-            builder.save_checkpoint(obitonet_img, img_optimizer, epoch, 'obitonet_img_ckpt-epoch-{epoch:03d}', args, logger = logger)
-            builder.save_checkpoint(obitonet_pc, ca_optimizer, epoch, 'obitonet_ca_ckpt-epoch-{epoch:03d}', args, logger = logger)
-            wandb.save(f'obitonet_pc_ckpt-epoch-{epoch:03d}')
-            wandb.save(f'obitonet_img_ckpt-epoch-{epoch:03d}')
-            wandb.save(f'obitonet_ca_ckpt-epoch-{epoch:03d}')
+        # if epoch % 200 ==0 and epoch >=250:
+        #     builder.save_checkpoint(obitonet_pc, pc_optimizer, epoch, 'obitonet_pc_ckpt-epoch-{epoch:03d}', args, logger = logger)
+        #     builder.save_checkpoint(obitonet_img, img_optimizer, epoch, 'obitonet_img_ckpt-epoch-{epoch:03d}', args, logger = logger)
+        #     builder.save_checkpoint(obitonet_pc, ca_optimizer, epoch, 'obitonet_ca_ckpt-epoch-{epoch:03d}', args, logger = logger)
+        #     wandb.save(f'obitonet_pc_ckpt-epoch-{epoch:03d}')
+        #     wandb.save(f'obitonet_img_ckpt-epoch-{epoch:03d}')
+        #     wandb.save(f'obitonet_ca_ckpt-epoch-{epoch:03d}')
  
     if train_writer is not None:
         train_writer.close()
