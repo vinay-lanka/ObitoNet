@@ -629,9 +629,11 @@ class ObitoNetImg(nn.Module):
     def __init__(self, config):
         super().__init__()
 
+        self.patch_size = int(((config.transformer_config.image_dim)**2 / config.num_group)**0.5)
+        print("Patch Size: ", self.patch_size)
         # Load ViT model configuration
         self.configuration = ViTConfig(hidden_size=config.transformer_config.trans_dim,
-                                       patch_size=config.transformer_config.patch_size
+                                       patch_size=self.patch_size,
                                        )
 
         # Load the image_processor

@@ -36,11 +36,12 @@ model : {
     decoder_depth: 12,
     decoder_num_heads: 6,
     patch_size: 28,
+    image_dim: 224,
     vit_model_name: 'google/vit-base-patch16-224-in21k'
   },
   }
 
 npoints: 16384
-total_bs : 256
+total_bs : 64
 step_per_update : 1
 max_epoch : 2000

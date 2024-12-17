@@ -96,7 +96,7 @@ def train(args, config, device, train_writer=None, val_writer=None):
     elif args.start_ckpt_epoch is not None:
         start_epoch = int(args.start_ckpt_epoch)
         builder.load_model(obitonet_pc, 'ObitoNetPC', args, logger = logger)
-        # builder.load_model(obitonet_img, 'ObitoNetImg', args, logger = logger)
+        builder.load_model(obitonet_img, 'ObitoNetImg', args, logger = logger)
         builder.load_model(obitonet_ca, 'ObitoNetCA', args, logger = logger)
 
     # DDP
@@ -132,17 +132,17 @@ def train(args, config, device, train_writer=None, val_writer=None):
     obitonet_img.zero_grad()
     obitonet_ca.zero_grad()
 
-    # Set image encoder to training mode, PC encoder CA to eval mode
+    # Set image encoder to training mode, PC encoder CA to eval modeeval
     obitonet_img.train()
-    obitonet_pc.eval()
-    obitonet_ca.eval()
+    obitonet_pc.train()
+    obitonet_ca.train()
 
     # Freeze the obitonet_pc and obitonet_ca
-    for param in obitonet_pc.parameters():
-        param.requires_grad = False
+    # for param in obitonet_pc.parameters():
+    #     param.requires_grad = False
 
-    for param in obitonet_ca.parameters():
-        param.requires_grad = False
+    # for param in obitonet_ca.parameters():
+    #     param.requires_grad = False
 
     for epoch in range(start_epoch, config.max_epoch + 1):
         if args.distributed:
