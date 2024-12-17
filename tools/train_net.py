@@ -58,7 +58,7 @@ class AverageMeter(object):
         else:
             return self._sum[idx] / self._count[idx]
 
-def train(args, config, train_writer=None, val_writer=None):
+def train(args, config, device, train_writer=None, val_writer=None):
     logger = None
     # build dataset
     (train_sampler, train_dataloader), (_, test_dataloader),= builder.dataset_builder(args, config.dataset.train), builder.dataset_builder(args, config.dataset.val)
@@ -77,7 +77,8 @@ def train(args, config, train_writer=None, val_writer=None):
     obitonet = ObitoNet(config.model, obitonet_pc, obitonet_img, obitonet_ca)
 
     if args.use_gpu:
-        obitonet.to(args.local_rank)
+        obitonet = nn.DataParallel(obitonet)
+        obitonet.to(device)
     
     wandb.watch(obitonet_pc, log="all")
     wandb.watch(obitonet_img, log="all")
@@ -95,7 +96,7 @@ def train(args, config, train_writer=None, val_writer=None):
     elif args.start_ckpt_epoch is not None:
         start_epoch = int(args.start_ckpt_epoch)
         builder.load_model(obitonet_pc, 'ObitoNetPC', args, logger = logger)
-        # builder.load_model(obitonet_img, 'ObitoNetImg', args, logger = logger)
+        builder.load_model(obitonet_img, 'ObitoNetImg', args, logger = logger)
         builder.load_model(obitonet_ca, 'ObitoNetCA', args, logger = logger)
 
     # DDP
@@ -133,15 +134,17 @@ def train(args, config, train_writer=None, val_writer=None):
 
     # Set image encoder to training mode, PC encoder CA to eval mode
     obitonet_img.train()
-    obitonet_pc.eval()
-    obitonet_ca.eval()
+    # obitonet_pc.eval()
+    # obitonet_ca.eval()
+    obitonet_pc.train()
+    obitonet_ca.train()
 
     # Freeze the obitonet_pc and obitonet_ca
-    for param in obitonet_pc.parameters():
-        param.requires_grad = False
+    # for param in obitonet_pc.parameters():
+    #     param.requires_grad = False
 
-    for param in obitonet_ca.parameters():
-        param.requires_grad = False
+    # for param in obitonet_ca.parameters():
+    #     param.requires_grad = False
 
     for epoch in range(start_epoch, config.max_epoch + 1):
         if args.distributed:
@@ -187,14 +190,14 @@ def train(args, config, train_writer=None, val_writer=None):
                 num_iter = 0
 
                 # Update the weights
-                # pc_optimizer.step()
+                pc_optimizer.step()
                 img_optimizer.step()
-                # ca_optimizer.step()
+                ca_optimizer.step()
 
                 # Set the gradient to zero
-                # obitonet_pc.zero_grad()
+                obitonet_pc.zero_grad()
                 obitonet_img.zero_grad()
-                # obitonet_ca.zero_grad()
+                obitonet_ca.zero_grad()
 
             if args.distributed:
                 loss = dist_utils.reduce_tensor(loss, args)
@@ -220,11 +223,11 @@ def train(args, config, train_writer=None, val_writer=None):
                 print_log('[Epoch %d/%d][Batch %d/%d] BatchTime = %.3f (s) DataTime = %.3f (s) Losses = %s pc_lr = %.6f ca_lr = %.6f' %
                             (epoch, config.max_epoch, idx + 1, n_batches, batch_time.val(), data_time.val(),
                             ['%.4f' % l for l in losses.val()], pc_optimizer.param_groups[0]['lr'], ca_optimizer.param_groups[0]['lr']), logger = logger)
-        # if isinstance(pc_scheduler, list):
-        #     for item in pc_scheduler:
-        #         item.step(epoch)
-        # else:
-        #     pc_scheduler.step(epoch)
+        if isinstance(pc_scheduler, list):
+            for item in pc_scheduler:
+                item.step(epoch)
+        else:
+            pc_scheduler.step(epoch)
 
         if isinstance(img_scheduler, list):
             for item in img_scheduler:
@@ -232,11 +235,11 @@ def train(args, config, train_writer=None, val_writer=None):
         else:
             img_scheduler.step(epoch)
 
-        # if isinstance(ca_scheduler, list):
-        #     for item in ca_scheduler:
-        #         item.step(epoch)
-        # else:
-        #     ca_scheduler.step(epoch)
+        if isinstance(ca_scheduler, list):
+            for item in ca_scheduler:
+                item.step(epoch)
+        else:
+            ca_scheduler.step(epoch)
 
 
         epoch_end_time = time.time()
@@ -255,11 +258,10 @@ def train(args, config, train_writer=None, val_writer=None):
         builder.save_checkpoint(obitonet_img, img_optimizer, epoch, 'obitonet_img_ckpt-last', args, logger = logger)
         builder.save_checkpoint(obitonet_ca, ca_optimizer, epoch, 'obitonet_ca_ckpt-last', args, logger = logger)
  
-        # #TODO WANDB
         wandb.save(os.path.join(args.experiment_path, 'obitonet_pc_ckpt-last.pth'))
         wandb.save(os.path.join(args.experiment_path, 'obitonet_img_ckpt.pth'))
         wandb.save(os.path.join(args.experiment_path, 'obitonet_ca_ckpt-last.pth'))
-        if epoch % 25 ==0 and epoch >=250:
+        if epoch % 100 ==0 and epoch >=250:
             builder.save_checkpoint(obitonet_pc, pc_optimizer, epoch, 'obitonet_pc_ckpt-epoch-{epoch:03d}', args, logger = logger)
             builder.save_checkpoint(obitonet_img, img_optimizer, epoch, 'obitonet_img_ckpt-epoch-{epoch:03d}', args, logger = logger)
             builder.save_checkpoint(obitonet_pc, ca_optimizer, epoch, 'obitonet_ca_ckpt-epoch-{epoch:03d}', args, logger = logger)
