@@ -58,7 +58,7 @@ class AverageMeter(object):
         else:
             return self._sum[idx] / self._count[idx]
 
-def train(args, config, train_writer=None, val_writer=None):
+def train(args, config, device, train_writer=None, val_writer=None):
     logger = None
     # build dataset
     (train_sampler, train_dataloader), (_, test_dataloader),= builder.dataset_builder(args, config.dataset.train), builder.dataset_builder(args, config.dataset.val)
@@ -77,7 +77,8 @@ def train(args, config, train_writer=None, val_writer=None):
     obitonet = ObitoNet(config.model, obitonet_pc, obitonet_img, obitonet_ca)
 
     if args.use_gpu:
-        obitonet.to(args.local_rank)
+        obitonet = nn.DataParallel(obitonet)
+        obitonet.to(device)
     
     wandb.watch(obitonet_pc, log="all")
     wandb.watch(obitonet_img, log="all")

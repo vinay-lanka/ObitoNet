@@ -28,6 +28,10 @@ def main():
     )
     # args
     args = parser.get_args()
+
+    if torch.cuda.device_count() > 1:
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
+
     # CUDA
     args.use_gpu = torch.cuda.is_available()
     if args.use_gpu:
@@ -90,7 +94,8 @@ def main():
     # return
     
     #Pretrain
-    train(args, config, train_writer, val_writer)
+    device = torch.device("cuda")
+    train(args, config, device, train_writer, val_writer)
 
 if __name__ == '__main__':
     main()

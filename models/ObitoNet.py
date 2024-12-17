@@ -450,8 +450,11 @@ class CrossAttention(nn.Module):
         # Attention matrix computation
         attn = (q @ k.transpose(-2, -1)) * self.scale # QK^T / sqrt(d_k)
         attn = attn.softmax(dim=-1) # Softmax(QK^T / sqrt(d_k))
+        attn = self.attn_drop(attn) # Dropout
+
         x_attn = (attn @ v).transpose(1, 2).reshape(B, N, C) # Softmax(QK^T / sqrt(d_k)) * V
         x_attn = self.proj(x_attn) # Learnable transformation
+        x_attn = self.attn_drop(x_attn)
 
         return x_attn
 
