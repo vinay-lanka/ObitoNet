@@ -14,7 +14,7 @@ def get_args():
         default='none',
         help='job launcher')     
     parser.add_argument('--local_rank', type=int, default=0)
-    parser.add_argument('--num_workers', type=int, default=8)
+    parser.add_argument('--num_workers', type=int, default=1)
     # seed 
     parser.add_argument('--seed', type=int, default=0, help='random seed')
     parser.add_argument(
@@ -80,16 +80,20 @@ def get_args():
         raise ValueError(
             '--resume and --start_ckpt_epoch cannot be both activate')
 
-    if args.test and args.ckpts is None:
-        raise ValueError(
-            'ckpts shouldnt be None while test mode')
+    # if args.test and args.ckpts is None:
+    #     raise ValueError(
+    #         'ckpts shouldnt be None while test mode')
 
     if args.finetune_model and args.ckpts is None:
         print(
             'training from scratch')
+        
+    # args.local_rank = int(os.environ['RANK'])
 
     if 'LOCAL_RANK' not in os.environ:
         os.environ['LOCAL_RANK'] = str(args.local_rank)
+
+    # args.local_rank = int(os.environ['RANK'])
 
     if args.test:
         args.exp_name = 'test_' + args.exp_name

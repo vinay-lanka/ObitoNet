@@ -28,7 +28,7 @@ class AverageMeter(object):
         self._count = [0] * self.n_items
 
     def update(self, values):
-        if type(values).__name__ == 'list':
+        if isinstance(values, list):
             for idx, v in enumerate(values):
                 self._val[idx] = v
                 self._sum[idx] += v
@@ -52,11 +52,14 @@ class AverageMeter(object):
 
     def avg(self, idx=None):
         if idx is None:
-            return self._sum[0] / self._count[0] if self.items is None else [
-                self._sum[i] / self._count[i] for i in range(self.n_items)
-            ]
+            if self.items is None:
+                return self._sum[0] / self._count[0] if self._count[0] > 0 else 0
+            else:
+                return [
+                    self._sum[i] / self._count[i] if self._count[i] > 0 else 0 for i in range(self.n_items)
+                ]
         else:
-            return self._sum[idx] / self._count[idx]
+            return self._sum[idx] / self._count[idx] if self._count[idx] > 0 else 0
 
 def train(args, config, train_writer=None, val_writer=None):
     logger = None
@@ -106,9 +109,9 @@ def train(args, config, train_writer=None, val_writer=None):
             # obitonet_img = torch.nn.SyncBatchNorm.convert_sync_batchnorm(obitonet_img)
             obitonet_ca = torch.nn.SyncBatchNorm.convert_sync_batchnorm(obitonet_ca)
             print_log('Using Synchronized BatchNorm ...', logger = logger)
-        obitonet_pc = nn.parallel.DistributedDataParallel(obitonet_pc, device_ids=[args.local_rank % torch.cuda.device_count()], find_unused_parameters=True)
-        # obitonet_img = nn.parallel.DistributedDataParallel(obitonet_img, device_ids=[args.local_rank % torch.cuda.device_count()], find_unused_parameters=True)
-        obitonet_ca = nn.parallel.DistributedDataParallel(obitonet_ca, device_ids=[args.local_rank % torch.cuda.device_count()], find_unused_parameters=True)
+        obitonet_pc = nn.parallel.DistributedDataParallel(obitonet_pc, device_ids=[args.local_rank], find_unused_parameters=True)
+        # obitonet_img = nn.parallel.DistributedDataParallel(obitonet_img, device_ids=[args.local_rank], find_unused_parameters=True)
+        obitonet_ca = nn.parallel.DistributedDataParallel(obitonet_ca, device_ids=[args.local_rank], find_unused_parameters=True)
         print_log('Using Distributed Data parallel ...' , logger = logger)
     else:
         print_log('Using Data parallel ...' , logger = logger)
@@ -167,11 +170,11 @@ def train(args, config, train_writer=None, val_writer=None):
             points = train_transforms(points)
             loss = obitonet(points)
             try:
-                loss.backward()
+                loss.backward(retain_graph=True)
                 # print("Using one GPU")
             except Exception as e:
                 loss = loss.mean()
-                loss.backward()
+                loss.backward(retain_graph=True)
                 # print("Using multi GPUs")
 
             # forward
@@ -228,20 +231,38 @@ def train(args, config, train_writer=None, val_writer=None):
         epoch_end_time = time.time()
         
         # log metrics to wandb
-        wandb.log({"loss": losses.avg(0), "losses":['%.4f' % l for l in losses.avg()], "pc_encoder_lr":pc_optimizer.param_groups[0]['lr'], "ca_decoder_lr":ca_optimizer.param_groups[0]['lr']})
+        # wandb.log({"loss": losses.avg(0), "pc_encoder_lr":pc_optimizer.param_groups[0]['lr'], "ca_decoder_lr":ca_optimizer.param_groups[0]['lr']})
+        # Check if losses have been updated
+
+        loss_avg = losses.avg()
+        if isinstance(loss_avg, list):
+            formatted_losses = ['%.4f' % l for l in loss_avg]
+        else:
+            formatted_losses = ['%.4f' % loss_avg]
+        # if losses.count(0) > 0:
+        #     print("Skipping wandb logging due to empty loss meter.")
+        # else:
+        wandb.log({
+            "loss": losses.avg(0),
+            "pc_encoder_lr": pc_optimizer.param_groups[0]['lr'],
+            "ca_decoder_lr": ca_optimizer.param_groups[0]['lr']
+        })
+
 
         if train_writer is not None:
             train_writer.add_scalar('Loss/Epoch/Loss_1', losses.avg(0), epoch)
+        
         print_log('[Training] EPOCH: %d EpochTime = %.3f (s) Losses = %s pc_lr = %.6f ca_lr = %.6f' %
-            (epoch,  epoch_end_time - epoch_start_time, ['%.4f' % l for l in losses.avg()],
-             pc_optimizer.param_groups[0]['lr'], ca_optimizer.param_groups[0]['lr']), logger = logger)
+            (epoch, epoch_end_time - epoch_start_time, formatted_losses,
+            pc_optimizer.param_groups[0]['lr'], ca_optimizer.param_groups[0]['lr']), logger = logger)
+
 
 
         builder.save_checkpoint(obitonet_pc, pc_optimizer, epoch, 'obitonet_pc_ckpt-last', args, logger = logger)
         # builder.save_checkpoint(obitonet_img, img_optimizer, epoch, 'obitonet_img_ckpt-last', args, logger = logger)
         builder.save_checkpoint(obitonet_ca, ca_optimizer, epoch, 'obitonet_ca_ckpt-last', args, logger = logger)
  
-        # #TODO WANDB
+ 
         wandb.save(os.path.join(args.experiment_path, 'obitonet_pc_ckpt-last.pth'))
         # wandb.save(os.path.join(args.experiment_path, 'obitonet_img_ckpt.pth'))
         wandb.save(os.path.join(args.experiment_path, 'obitonet_ca_ckpt-last.pth'))

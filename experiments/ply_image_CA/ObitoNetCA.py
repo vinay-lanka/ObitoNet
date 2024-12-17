@@ -499,7 +499,7 @@ class ObitoNet (nn.Module):
         self.build_loss_func(self.loss)
 
         # Cross Attention
-        self.cross_attn = CrossAttention()
+        self.cross_attn = CrossAttention(dim=self.trans_dim)
 
     def build_loss_func(self, loss_type):
         if loss_type == "cdl1":

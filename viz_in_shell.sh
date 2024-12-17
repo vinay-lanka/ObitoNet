@@ -11,8 +11,8 @@ module add cuda/11.8.0
 module add gcc/11.2.0
 
 # Run the main script with the specified configuration
-python main.py --launcher pytorch --config configs/config.yaml --exp_name CA_Train_1_DISTRIBUTED
+# python main.py --config configs/config.yaml --start_ckpt_epoch=3 --exp_name nexustest
 
-# python visualization.py --test --config configs/config.yaml --exp_name CA_Train_1_BASELINE
+python visualization.py --test --config configs/config.yaml --exp_name CA_Train_1_BASELINE
 # Print success message
 echo "ran successfully"

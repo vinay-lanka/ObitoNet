@@ -1,12 +1,15 @@
 dataset/
 wandb/
-tools/__pycache__
-utils/__pycache__
+tools/__pycache__/
+utils/__pycache__/
 current_run/
 tfboard/
 vis/
 logs/
 TanksAndTemples.zip
-experiments/ply_image_CA/__pycache__
-extensions/chamfer_dist/__pycache__
+experiments/ply_image_CA/__pycache__/
+extensions/chamfer_dist/__pycache__/
 models/__pycache__
+# CA_Train_1_BASELINE/
+Phase1_TO1/
+Phase3_TO1/

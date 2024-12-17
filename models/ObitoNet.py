@@ -457,7 +457,7 @@ class ObitoNet_CA(nn.Module):
         self.trans_dim = config.transformer_config.trans_dim
 
         # Cross Attention
-        self.cross_attn = CrossAttention()
+        self.cross_attn = CrossAttention(dim=self.trans_dim)
 
         #MAE Decoder
         self.decoder_depth = config.transformer_config.decoder_depth
@@ -477,7 +477,7 @@ class ObitoNet_CA(nn.Module):
             # nn.Conv1d(self.trans_dim, 1024, 1),
             # nn.BatchNorm1d(1024),
             # nn.LeakyReLU(negative_slope=0.2),
-            nn.Conv1d(self.trans_dim, 3*self.group_size, 1)
+            nn.Conv1d(self.trans_dim, 45*self.group_size, 1)
         )
     
     def load_model_from_ckpt(self, ckpt_path):
@@ -635,6 +635,9 @@ class ObitoNet (nn.Module):
         # loss
         self.build_loss_func(self.loss)
 
+        #For viz
+        self.num_groups = config.num_group
+
     def build_loss_func(self, loss_type):
         if loss_type == "cdl1":
             self.loss_func = ChamferDistanceL1().cuda()
@@ -694,7 +697,8 @@ class ObitoNet (nn.Module):
             vis_points = neighborhood[~mask].reshape(B * (self.num_groups - M), -1, 3)
             full_vis = vis_points + center[~mask].unsqueeze(1)
             full_rebuild = pts_reconstructed + center[mask].unsqueeze(1)
-            full = torch.cat([full_vis, full_rebuild], dim=0)
+            full_viz = full_vis.repeat(1,full_rebuild.shape[1] // full_vis.shape[1],1)
+            full = torch.cat([full_viz, full_rebuild], dim=0)
             # full_points = torch.cat([rebuild_points,vis_points], dim=0)
             full_center = torch.cat([center[mask], center[~mask]], dim=0)
             # full = full_points + full_center.unsqueeze(1)

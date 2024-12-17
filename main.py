@@ -82,8 +82,8 @@ def main():
                     f'deterministic: {args.deterministic}')
         misc.set_random_seed(args.seed + args.local_rank, deterministic=args.deterministic) # seed + rank, for augmentation
     
-    if args.distributed:
-        assert args.local_rank == torch.distributed.get_rank() 
+    # if args.distributed:
+    #     assert args.local_rank == torch.distributed.get_rank() 
 
     # Print the config
     # print("config: ", config)
