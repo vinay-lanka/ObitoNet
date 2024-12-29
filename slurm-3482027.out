@@ -1,0 +1,20 @@
+Loading gcc/11.2.0
+  Loading requirement: gmp/6.1.1 mpfr/3.1.4 mpc/1.0.3 gmp/6.3.0 ppl/1.2
+    cloog/0.18.4 dejagnu/1.6.3 autogen/5.18.7
+/fs/classhomes/fall2024/cmsc848k/c848k062/miniconda3/envs/obito_env/lib/python3.10/site-packages/torch/utils/cpp_extension.py:1964: UserWarning: TORCH_CUDA_ARCH_LIST is not set, all archs for visible cards are included for compilation. 
+If this is not desired, please set os.environ['TORCH_CUDA_ARCH_LIST'].
+  warnings.warn(
+wandb: Using wandb-core as the SDK backend.  Please refer to https://wandb.me/wandb-core for more information.
+wandb: Currently logged in as: apoorv1009 (apoorv10). Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.19.1
+wandb: Run data is saved locally in /fs/classhomes/fall2024/cmsc848k/c848k062/ObitoNet/wandb/run-20241214_192725-on0yzuge
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run smart-bird-6
+wandb: ⭐️ View project at https://wandb.ai/apoorv10/obitonet
+wandb: 🚀 View run at https://wandb.ai/apoorv10/obitonet/runs/on0yzuge
+Copy the Config file from configs/config.yaml to ./current_run/config/configs/nexustest/config.yaml
+Set random seed to 0, deterministic: False
+config:  {'optimizer': {'type': 'AdamW', 'kwargs': {'lr': 0.001, 'weight_decay': 0.05}}, 'scheduler': {'type': 'CosLR', 'kwargs': {'epochs': 300, 'initial_epochs': 10}}, 'dataset': {'train': {'_base_': {'NAME': 'TanksAndTemples', 'N_POINTS': 16384, 'PC_PATH': 'dataset/TanksAndTemples', 'IMG_PATH': 'dataset/TanksAndTemples', 'TRAIN_PATH': 'dataset/TanksAndTemples/test.csv', 'TEST_PATH': 'dataset/TanksAndTemples/test.csv'}, 'others': {'subset': 'train', 'npoints': 16384, 'bs': 32}}, 'val': {'_base_': {'NAME': 'TanksAndTemples', 'N_POINTS': 16384, 'PC_PATH': 'dataset/TanksAndTemples', 'IMG_PATH': 'dataset/TanksAndTemples', 'TRAIN_PATH': 'dataset/TanksAndTemples/test.csv', 'TEST_PATH': 'dataset/TanksAndTemples/test.csv'}, 'others': {'subset': 'test', 'npoints': 16384, 'bs': 64}}, 'test': {'_base_': {'NAME': 'TanksAndTemples', 'N_POINTS': 16384, 'PC_PATH': 'dataset/TanksAndTemples', 'IMG_PATH': 'dataset/TanksAndTemples', 'TRAIN_PATH': 'dataset/TanksAndTemples/test.csv', 'TEST_PATH': 'dataset/TanksAndTemples/test.csv'}, 'others': {'subset': 'test', 'npoints': 16384, 'bs': 32}}}, 'model': {'NAME': 'Point_MAE', 'group_size': 32, 'num_group': 64, 'loss': 'cdl2', 'transformer_config': {'mask_ratio': 0.6, 'mask_type': 'rand', 'trans_dim': 384, 'encoder_dims': 384, 'depth': 12, 'drop_path_rate': 0.1, 'num_heads': 6, 'decoder_depth': 4, 'decoder_num_heads': 6}}, 'npoints': 16384, 'total_bs': 32, 'step_per_update': 1, 'max_epoch': 300}
+[1;34mwandb[0m: 🚀 View run [33msmart-bird-6[0m at: [34mhttps://wandb.ai/apoorv10/obitonet/runs/on0yzuge[0m
+[1;34mwandb[0m: Find logs at: [1;35mwandb/run-20241214_192725-on0yzuge/logs[0m
+ran successfully

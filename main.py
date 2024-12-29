@@ -9,6 +9,8 @@ import torch
 from utils.logging import *
 import wandb
 
+torch.autograd.set_detect_anomaly(True)
+
 def main():
 
     # start a new wandb run to track this script
@@ -82,6 +84,10 @@ def main():
     
     if args.distributed:
         assert args.local_rank == torch.distributed.get_rank() 
+
+    # Print the config
+    # print("config: ", config)
+    # return
     
     #Pretrain
     train(args, config, train_writer, val_writer)
