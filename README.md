@@ -1,7 +1,11 @@
-# ObitoNet
+# ObitoNet, [ArXiv](https://arxiv.org/abs/2412.18775)
 
 ## Overview
-ObitoNet is a deep learning framework designed for advanced 3D point cloud and image-based tasks. It combines a Point Cloud Encoder, Cross Attention Decoder, and the potential for an Image Encoder (future integration). ObitoNet excels in tasks requiring high fidelity and precision, such as augmented reality, robotics, and 3D reconstruction.
+
+This repository contains the code and approaches for [ObitoNet](https://arxiv.org/abs/2412.18775), a multimodal masked point cloud reconstruction model using a Transformer based approach.
+We effectively fuse image features and point cloud features with a Cross-Attention mechanism. Our approach leverages Vision Transformers (ViT) to extract rich semantic features to create input tokens.
+A Point Cloud tokenizer generates point cloud tokens utilizing Farthest Point Sampling (FPS) and K-Nearest Neighbors (KNN) and captures local geometric details. 
+These multimodal features are combined using a learnable Cross-Attention decoder module, that reconstructs high-fidelity point clouds. 
 
 A link to the video showcasing ObitoNet can be found [here](https://www.youtube.com/watch?v=xC1fuEzKreo).
 
@@ -31,7 +35,7 @@ pip install --upgrade https://github.com/unlimblue/KNN_CUDA/releases/download/0.
 ```
 
 ## 4. Training
-To pretrain Point-MAE on ShapeNet training set, run the following command. If you want to try different models or masking ratios etc., first create a new config file, and pass its path to --config.
+To train ObitoNet, run the following command. There's are a recommended training order. To learn more about training order and other experiments, please refer to our paper.
 
 ```
 CUDA_VISIBLE_DEVICES=<GPU> python main.py --config configs/config.yaml --exp_name <output_file_name>
@@ -39,20 +43,22 @@ CUDA_VISIBLE_DEVICES=<GPU> python main.py --config configs/config.yaml --exp_nam
 
 ## Visualization
 
-Visulization of pre-trained model on ShapeNet validation set, run:
+To visualize the Point Clouds run:
 
 ```
-python main_vis.py --test --ckpts <path/to/pre-trained/model> --config configs/config.yaml--exp_name <name>
+python visualization.py --test --config configs/config.yaml--exp_name <name>
 ```
 
-### Dataset Prep 
-
-For uniform downsampling, I used different k_values for different data-subsets, as some values were giving us samples less than 16k (less than fps output)
-k = 100 (for all)
-k = 20 (for caterpillar)
-
-### 
+## Training (Nexus Cluster - UMD)
 To run the terminal interactively:
 ```bash
 bash-4.4$ srun --gres=gpu:rtxa5000:4 --account=class --partition=class --qos high -t 1-00:00:00 --mem-per-cpu=64gb --pty bash -i
 ```
+
+### Dataset Prep 
+
+The model was developed using a modified version Tanks and Temples dataset ([link](https://www.tanksandtemples.org/)). 
+We are hosting our modified dataset generated for this particular model here. This uses sampling to generate a set of fixed size point clouds to train the model. THe process is documented in the [Dataloader.ipynb](https://github.com/vinay-lanka/ObitoNet/blob/master/experiments/dataloader.ipynb)
+For uniform downsampling, I used different k_values for different data-subsets, as some values were giving us samples less than 16k (less than fps output)
+k = 100 (for all)
+k = 20 (for caterpillar)
